@@ -2,7 +2,7 @@ import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { getProfileEnv } from '../rate-limit-detector';
 import { getAPIProfileEnv } from '../services/profile';
-import { getOAuthModeClearVars } from '../agent/env-utils';
+import { getOAuthModeClearVars, getFreshAWSCredentials } from '../agent/env-utils';
 import { pythonEnvManager, getConfiguredPythonPath } from '../python-env-manager';
 import { getValidatedPythonPath } from '../python-detector';
 import { getAugmentedEnv } from '../env-utils';
@@ -110,7 +110,9 @@ export class InsightsConfig {
     const autoBuildEnv = this.loadAutoBuildEnv();
     const profileEnv = getProfileEnv();
     const apiProfileEnv = await getAPIProfileEnv();
-    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+    const combinedEnv = { ...process.env, ...autoBuildEnv } as Record<string, string>;
+    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, combinedEnv);
+    const freshAWSCredentials = getFreshAWSCredentials(combinedEnv);
     const pythonEnv = pythonEnvManager.getPythonEnv();
     const autoBuildSource = this.getAutoBuildSourcePath();
     const pythonPathParts = (pythonEnv.PYTHONPATH ?? '')
@@ -145,6 +147,7 @@ export class InsightsConfig {
       ...pythonEnv, // Include PYTHONPATH for bundled site-packages
       ...autoBuildEnv,
       ...oauthModeClearVars,
+      ...freshAWSCredentials, // Fresh AWS credentials for Bedrock mode
       ...profileEnv,
       ...apiProfileEnv,
       PYTHONUNBUFFERED: '1',

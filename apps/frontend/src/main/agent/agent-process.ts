@@ -21,7 +21,7 @@ import { pythonEnvManager, getConfiguredPythonPath } from '../python-env-manager
 import { buildMemoryEnvVars } from '../memory-env-builder';
 import { readSettingsFile } from '../settings-utils';
 import type { AppSettings } from '../../shared/types/settings';
-import { getOAuthModeClearVars } from './env-utils';
+import { getOAuthModeClearVars, getFreshAWSCredentials } from './env-utils';
 import { getAugmentedEnv } from '../env-utils';
 import { getToolInfo } from '../cli-tool-manager';
 import { killProcessGracefully } from '../platform';
@@ -508,8 +508,17 @@ export class AgentProcessManager {
       // Continue with empty profile env (falls back to OAuth mode)
     }
 
-    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode)
-    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+    // Load backend .env file (contains CLAUDE_CODE_USE_BEDROCK, AWS_REGION, AWS_PROFILE, etc.)
+    const autoBuildEnv = this.loadAutoBuildEnv();
+
+    // Combine env for checking Bedrock mode
+    const combinedEnv = { ...env, ...autoBuildEnv } as Record<string, string>;
+
+    // Get fresh AWS credentials from ~/.aws/credentials when using Bedrock + AWS_PROFILE
+    const freshAWSCredentials = getFreshAWSCredentials(combinedEnv);
+
+    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode, skips if Bedrock)
+    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, combinedEnv);
 
     // Parse Python commandto handle space-separated commands like "py -3"
     const [pythonCommand, pythonBaseArgs] = parsePythonCommand(this.getPythonPath());
@@ -517,8 +526,10 @@ export class AgentProcessManager {
       cwd,
       env: {
         ...env, // Already includes process.env, extraEnv, profileEnv, PYTHONUNBUFFERED, PYTHONUTF8
+        ...autoBuildEnv, // Backend .env (CLAUDE_CODE_USE_BEDROCK, AWS_REGION, AWS_PROFILE)
         ...pythonEnv, // Include Python environment (PYTHONPATH for bundled packages)
-        ...oauthModeClearVars, // Clear stale ANTHROPIC_* vars when in OAuth mode
+        ...oauthModeClearVars, // Clear stale ANTHROPIC_* vars when in OAuth mode (skipped for Bedrock)
+        ...freshAWSCredentials, // Fresh AWS credentials from ~/.aws/credentials
         ...apiProfileEnv // Include active API profile config (highest priority for ANTHROPIC_* vars)
       }
     });

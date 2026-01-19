@@ -93,6 +93,10 @@ def setup_environment() -> Path:
     elif dev_env_file.exists():
         load_dotenv(dev_env_file)
 
+    # Clear OAuth tokens when Bedrock mode is enabled
+    from core.bedrock import clear_oauth_for_bedrock
+    clear_oauth_for_bedrock()
+
     return script_dir
 
 
@@ -162,8 +166,11 @@ def validate_environment(spec_dir: Path) -> bool:
 
     valid = True
 
-    # Check for OAuth token (API keys are not supported)
-    if not get_auth_token():
+    # Check for OAuth token (API keys are not supported) - skip if using Bedrock
+    from core.bedrock import is_bedrock_enabled
+    if is_bedrock_enabled():
+        print(f"Auth: AWS Bedrock ({os.environ.get('AWS_REGION', 'us-east-1')})")
+    elif not get_auth_token():
         print("Error: No OAuth token found")
         print("\nAuto Claude requires Claude Code OAuth authentication.")
         print("Direct API keys (ANTHROPIC_API_KEY) are not supported.")

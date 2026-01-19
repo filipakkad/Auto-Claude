@@ -59,6 +59,15 @@ SDK_ENV_VARS = [
     "API_TIMEOUT_MS",
     # Windows-specific: Git Bash path for Claude Code CLI
     "CLAUDE_CODE_GIT_BASH_PATH",
+    # AWS Bedrock configuration
+    "CLAUDE_CODE_USE_BEDROCK",
+    "AWS_PROFILE",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "BEDROCK_MODEL",
 ]
 
 
@@ -545,27 +554,43 @@ def require_auth_token() -> str:
     """
     Get authentication token or raise ValueError.
 
+    When Bedrock mode is enabled (CLAUDE_CODE_USE_BEDROCK=true), returns a
+    placeholder token since AWS credentials are used instead of OAuth.
+
     Raises:
-        ValueError: If no auth token is found in any supported source
+        ValueError: If no auth token is found and not in Bedrock mode
     """
+    # Check if Bedrock mode is enabled - if so, use AWS credentials instead
+    from core.bedrock import is_bedrock_enabled, require_bedrock_credentials
+
+    if is_bedrock_enabled():
+        # Validate AWS credentials are available
+        require_bedrock_credentials()
+        # Return a placeholder token - Bedrock uses AWS credentials
+        return "bedrock-mode-no-oauth-token-needed"
+
     token = get_auth_token()
     if not token:
         error_msg = (
             "No OAuth token found.\n\n"
             "Auto Claude requires Claude Code OAuth authentication.\n"
             "Direct API keys (ANTHROPIC_API_KEY) are not supported.\n\n"
+            "Alternatively, you can use AWS Bedrock by setting:\n"
+            "  CLAUDE_CODE_USE_BEDROCK=true\n"
+            "  AWS_PROFILE=your-profile\n"
+            "  AWS_REGION=us-east-1\n\n"
         )
         # Provide platform-specific guidance
         if is_macos():
             error_msg += (
-                "To authenticate:\n"
+                "To authenticate with OAuth:\n"
                 "  1. Run: claude setup-token\n"
                 "  2. The token will be saved to macOS Keychain automatically\n\n"
                 "Or set CLAUDE_CODE_OAUTH_TOKEN in your .env file."
             )
         elif is_windows():
             error_msg += (
-                "To authenticate:\n"
+                "To authenticate with OAuth:\n"
                 "  1. Run: claude setup-token\n"
                 "  2. The token should be saved to Windows Credential Manager\n\n"
                 "If auto-detection fails, set CLAUDE_CODE_OAUTH_TOKEN in your .env file.\n"
@@ -574,7 +599,7 @@ def require_auth_token() -> str:
         else:
             # Linux
             error_msg += (
-                "To authenticate:\n"
+                "To authenticate with OAuth:\n"
                 "  1. Run: claude setup-token\n"
                 "  2. The token will be saved to the system secret service (gnome-keyring/kwallet)\n\n"
                 "If secret-service is not available, set CLAUDE_CODE_OAUTH_TOKEN in your .env file."
@@ -706,7 +731,19 @@ def ensure_claude_code_oauth_token() -> None:
 
     If not set but other auth tokens are available, copies the value
     to CLAUDE_CODE_OAUTH_TOKEN so the underlying SDK can use it.
+
+    IMPORTANT: Skips when Bedrock mode is enabled to prevent OAuth tokens
+    from interfering with AWS authentication.
     """
+    # Skip if Bedrock mode is enabled - OAuth tokens would interfere
+    from core.bedrock import is_bedrock_enabled
+
+    if is_bedrock_enabled():
+        # Actually REMOVE the token if present to prevent inheritance
+        if "CLAUDE_CODE_OAUTH_TOKEN" in os.environ:
+            del os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
+        return
+
     if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         return
 

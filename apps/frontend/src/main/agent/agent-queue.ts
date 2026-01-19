@@ -9,7 +9,7 @@ import { RoadmapConfig } from './types';
 import type { IdeationConfig, Idea } from '../../shared/types';
 import { detectRateLimit, createSDKRateLimitInfo, getProfileEnv } from '../rate-limit-detector';
 import { getAPIProfileEnv } from '../services/profile';
-import { getOAuthModeClearVars } from './env-utils';
+import { getOAuthModeClearVars, getFreshAWSCredentials } from './env-utils';
 import { debugLog, debugError } from '../../shared/utils/debug-logger';
 import { stripAnsiCodes } from '../../shared/utils/ansi-sanitizer';
 import { parsePythonCommand } from '../python-detector';
@@ -263,8 +263,11 @@ export class AgentQueueManager {
     // Get active API profile environment variables
     const apiProfileEnv = await getAPIProfileEnv();
 
-    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode)
-    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode, skips for Bedrock)
+    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, combinedEnv);
+
+    // Get fresh AWS credentials for Bedrock mode
+    const freshAWSCredentials = getFreshAWSCredentials(combinedEnv);
 
     // Get Python path from process manager (uses venv if configured)
     const pythonPath = this.processManager.getPythonPath();
@@ -287,14 +290,16 @@ export class AgentQueueManager {
     // 2. pythonEnv (bundled packages environment)
     // 3. combinedEnv (auto-claude/.env for CLI usage)
     // 4. oauthModeClearVars (clear stale ANTHROPIC_* vars when in OAuth mode)
-    // 5. profileEnv (Electron app OAuth token)
-    // 6. apiProfileEnv (Active API profile config - highest priority for ANTHROPIC_* vars)
-    // 7. Our specific overrides
+    // 5. freshAWSCredentials (fresh AWS creds for Bedrock)
+    // 6. profileEnv (Electron app OAuth token)
+    // 7. apiProfileEnv (Active API profile config - highest priority for ANTHROPIC_* vars)
+    // 8. Our specific overrides
     const finalEnv = {
       ...process.env,
       ...pythonEnv,
       ...combinedEnv,
       ...oauthModeClearVars,
+      ...freshAWSCredentials,
       ...profileEnv,
       ...apiProfileEnv,
       PYTHONPATH: combinedPythonPath,
@@ -590,8 +595,11 @@ export class AgentQueueManager {
     // Get active API profile environment variables
     const apiProfileEnv = await getAPIProfileEnv();
 
-    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode)
-    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+    // Get OAuth mode clearing vars (clears stale ANTHROPIC_* vars when in OAuth mode, skips for Bedrock)
+    const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, combinedEnv);
+
+    // Get fresh AWS credentials for Bedrock mode
+    const freshAWSCredentials = getFreshAWSCredentials(combinedEnv);
 
     // Get Python path from process manager (uses venv if configured)
     const pythonPath = this.processManager.getPythonPath();
@@ -614,14 +622,16 @@ export class AgentQueueManager {
     // 2. pythonEnv (bundled packages environment)
     // 3. combinedEnv (auto-claude/.env for CLI usage)
     // 4. oauthModeClearVars (clear stale ANTHROPIC_* vars when in OAuth mode)
-    // 5. profileEnv (Electron app OAuth token)
-    // 6. apiProfileEnv (Active API profile config - highest priority for ANTHROPIC_* vars)
-    // 7. Our specific overrides
+    // 5. freshAWSCredentials (fresh AWS creds for Bedrock)
+    // 6. profileEnv (Electron app OAuth token)
+    // 7. apiProfileEnv (Active API profile config - highest priority for ANTHROPIC_* vars)
+    // 8. Our specific overrides
     const finalEnv = {
       ...process.env,
       ...pythonEnv,
       ...combinedEnv,
       ...oauthModeClearVars,
+      ...freshAWSCredentials,
       ...profileEnv,
       ...apiProfileEnv,
       PYTHONPATH: combinedPythonPath,

@@ -95,17 +95,23 @@ def resolve_model_id(model: str) -> str:
     Resolve a model shorthand (haiku, sonnet, opus) to a full model ID.
     If the model is already a full ID, return it unchanged.
 
+    When CLAUDE_CODE_USE_BEDROCK is enabled, automatically converts
+    model IDs to their Bedrock equivalents.
+
     Priority:
     1. Environment variable override (from API Profile)
     2. Hardcoded MODEL_ID_MAP
     3. Pass through unchanged (assume full model ID)
+    4. Convert to Bedrock model ID if Bedrock mode is enabled
 
     Args:
         model: Model shorthand or full ID
 
     Returns:
-        Full Claude model ID
+        Full Claude model ID (or Bedrock model ID if Bedrock is enabled)
     """
+    resolved_model = model
+
     # Check for environment variable override (from API Profile custom model mappings)
     if model in MODEL_ID_MAP:
         env_var_map = {
@@ -117,13 +123,19 @@ def resolve_model_id(model: str) -> str:
         if env_var:
             env_value = os.environ.get(env_var)
             if env_value:
-                return env_value
+                resolved_model = env_value
+            else:
+                # Fall back to hardcoded mapping
+                resolved_model = MODEL_ID_MAP[model]
+        else:
+            resolved_model = MODEL_ID_MAP[model]
 
-        # Fall back to hardcoded mapping
-        return MODEL_ID_MAP[model]
+    # Convert to Bedrock model ID if Bedrock mode is enabled
+    from core.bedrock import is_bedrock_enabled, get_bedrock_model
+    if is_bedrock_enabled():
+        resolved_model = get_bedrock_model(resolved_model)
 
-    # Already a full model ID or unknown shorthand
-    return model
+    return resolved_model
 
 
 def get_thinking_budget(thinking_level: str) -> int | None:

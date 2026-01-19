@@ -23,6 +23,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from core.bedrock import (
+    get_bedrock_env_vars,
+    get_bedrock_model,
+    is_bedrock_enabled,
+)
 from core.platform import (
     get_claude_detection_paths_structured,
     get_comspec_path,
@@ -709,18 +714,32 @@ def create_client(
        (see security.py for ALLOWED_COMMANDS)
     4. Tool filtering - Each agent type only sees relevant tools (prevents misuse)
     """
+    # Check if using AWS Bedrock
+    use_bedrock = is_bedrock_enabled()
+
     oauth_token = require_auth_token()
 
     # Validate token is not encrypted before passing to SDK
-    # Encrypted tokens (enc:...) should have been decrypted by require_auth_token()
-    # If we still have an encrypted token here, it means decryption failed or was skipped
-    validate_token_not_encrypted(oauth_token)
+    # Skip validation for Bedrock mode (uses placeholder token)
+    if not use_bedrock:
+        # Encrypted tokens (enc:...) should have been decrypted by require_auth_token()
+        # If we still have an encrypted token here, it means decryption failed or was skipped
+        validate_token_not_encrypted(oauth_token)
 
-    # Ensure SDK can access it via its expected env var
-    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
+    # Ensure SDK can access it via its expected env var (not needed for Bedrock)
+    if not use_bedrock:
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
 
     # Collect env vars to pass to SDK (ANTHROPIC_BASE_URL, etc.)
     sdk_env = get_sdk_env_vars()
+
+    # Add Bedrock-specific environment variables
+    if use_bedrock:
+        bedrock_env = get_bedrock_env_vars()
+        sdk_env.update(bedrock_env)
+        from core.bedrock import remove_oauth_from_env
+        model = get_bedrock_model(model)
+        remove_oauth_from_env(sdk_env)
 
     # Debug: Log git-bash path detection on Windows
     if "CLAUDE_CODE_GIT_BASH_PATH" in sdk_env:
@@ -888,6 +907,12 @@ def create_client(
         print(f"   - Extended thinking: {max_thinking_tokens:,} tokens")
     else:
         print("   - Extended thinking: disabled")
+
+    # Display API status
+    if use_bedrock:
+        print(f"   - API: AWS Bedrock ({os.environ.get('AWS_REGION', 'us-east-1')})")
+    else:
+        print("   - API: Anthropic (OAuth)")
 
     # Build list of MCP servers for display based on required_servers
     mcp_servers_list = []

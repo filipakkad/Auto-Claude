@@ -30,6 +30,7 @@ from core.auth import (
     require_auth_token,
     validate_token_not_encrypted,
 )
+from core.bedrock import get_bedrock_env_vars, get_bedrock_model, is_bedrock_enabled
 from core.client import find_claude_cli
 from phase_config import get_thinking_budget
 
@@ -69,20 +70,34 @@ def create_simple_client(
     Raises:
         ValueError: If agent_type is not found in AGENT_CONFIGS
     """
+    # Check if using AWS Bedrock
+    use_bedrock = is_bedrock_enabled()
+
     # Get authentication
     oauth_token = require_auth_token()
 
     # Validate token is not encrypted before passing to SDK
-    # Encrypted tokens (enc:...) should have been decrypted by require_auth_token()
-    # If we still have an encrypted token here, it means decryption failed or was skipped
-    validate_token_not_encrypted(oauth_token)
+    # Skip validation for Bedrock mode (uses placeholder token)
+    if not use_bedrock:
+        # Encrypted tokens (enc:...) should have been decrypted by require_auth_token()
+        # If we still have an encrypted token here, it means decryption failed or was skipped
+        validate_token_not_encrypted(oauth_token)
 
     import os
 
-    os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
+    # Set OAuth token (not needed for Bedrock)
+    if not use_bedrock:
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = oauth_token
 
     # Get environment variables for SDK
     sdk_env = get_sdk_env_vars()
+
+    # Add Bedrock-specific environment variables
+    if use_bedrock:
+        from core.bedrock import remove_oauth_from_env
+        sdk_env.update(get_bedrock_env_vars())
+        model = get_bedrock_model(model)
+        remove_oauth_from_env(sdk_env)
 
     # Get agent configuration (raises ValueError if unknown type)
     config = get_agent_config(agent_type)

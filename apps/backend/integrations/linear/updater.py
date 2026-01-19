@@ -118,6 +118,7 @@ def _create_linear_client() -> ClaudeSDKClient:
         get_sdk_env_vars,
         require_auth_token,
     )
+    from core.bedrock import get_bedrock_env_vars, get_bedrock_model, is_bedrock_enabled
     from phase_config import resolve_model_id
 
     require_auth_token()  # Raises ValueError if no token found
@@ -127,11 +128,20 @@ def _create_linear_client() -> ClaudeSDKClient:
     if not linear_api_key:
         raise ValueError("LINEAR_API_KEY not set")
 
+    # Resolve model and build SDK environment
+    model = resolve_model_id("haiku")
     sdk_env = get_sdk_env_vars()
+
+    # Add Bedrock-specific configuration if enabled
+    if is_bedrock_enabled():
+        from core.bedrock import remove_oauth_from_env
+        sdk_env.update(get_bedrock_env_vars())
+        model = get_bedrock_model(model)
+        remove_oauth_from_env(sdk_env)
 
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
-            model=resolve_model_id("haiku"),  # Resolves via API Profile if configured
+            model=model,
             system_prompt="You are a Linear API assistant. Execute the requested Linear operation precisely.",
             allowed_tools=LINEAR_TOOLS,
             mcp_servers={

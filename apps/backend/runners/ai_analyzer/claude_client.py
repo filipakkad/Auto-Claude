@@ -8,6 +8,8 @@ from typing import Any
 
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+    from core.auth import get_sdk_env_vars
+    from core.bedrock import get_bedrock_env_vars, get_bedrock_model, is_bedrock_enabled
     from phase_config import resolve_model_id
 
     CLAUDE_SDK_AVAILABLE = True
@@ -109,14 +111,26 @@ class ClaudeAnalysisClient:
             f"Output your analysis as valid JSON only."
         )
 
+        # Resolve model and build SDK environment
+        model = resolve_model_id(self.DEFAULT_MODEL)
+        sdk_env = get_sdk_env_vars()
+
+        # Add Bedrock-specific configuration if enabled
+        if is_bedrock_enabled():
+            from core.bedrock import remove_oauth_from_env
+            sdk_env.update(get_bedrock_env_vars())
+            model = get_bedrock_model(model)
+            remove_oauth_from_env(sdk_env)
+
         return ClaudeSDKClient(
             options=ClaudeAgentOptions(
-                model=resolve_model_id(self.DEFAULT_MODEL),  # Resolve via API Profile
+                model=model,
                 system_prompt=system_prompt,
                 allowed_tools=self.ALLOWED_TOOLS,
                 max_turns=self.MAX_TURNS,
                 cwd=str(self.project_dir.resolve()),
                 settings=str(settings_file.resolve()),
+                env=sdk_env,
             )
         )
 

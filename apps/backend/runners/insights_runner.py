@@ -39,7 +39,8 @@ except ImportError:
     ClaudeAgentOptions = None
     ClaudeSDKClient = None
 
-from core.auth import ensure_claude_code_oauth_token, get_auth_token
+from core.auth import ensure_claude_code_oauth_token, get_auth_token, get_sdk_env_vars
+from core.bedrock import get_bedrock_env_vars, get_bedrock_model, is_bedrock_enabled
 from debug import (
     debug,
     debug_detailed,
@@ -190,13 +191,25 @@ Current question: {message}"""
     )
 
     try:
+        # Resolve model and build SDK environment
+        resolved_model = resolve_model_id(model)
+        sdk_env = get_sdk_env_vars()
+
+        # Add Bedrock-specific configuration if enabled
+        if is_bedrock_enabled():
+            from core.bedrock import remove_oauth_from_env
+            sdk_env.update(get_bedrock_env_vars())
+            resolved_model = get_bedrock_model(resolved_model)
+            remove_oauth_from_env(sdk_env)
+
         # Build options dict - only include max_thinking_tokens if not None
         options_kwargs = {
-            "model": resolve_model_id(model),  # Resolve via API Profile if configured
+            "model": resolved_model,
             "system_prompt": system_prompt,
             "allowed_tools": ["Read", "Glob", "Grep"],
             "max_turns": 30,  # Allow sufficient turns for codebase exploration
             "cwd": str(project_path),
+            "env": sdk_env,
         }
 
         # Only add thinking tokens if the thinking level is not "none"

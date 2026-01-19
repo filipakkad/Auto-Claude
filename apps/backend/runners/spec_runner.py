@@ -99,6 +99,10 @@ if env_file.exists():
 elif dev_env_file.exists():
     load_dotenv(dev_env_file)
 
+# Clear OAuth tokens when Bedrock mode is enabled
+from core.bedrock import clear_oauth_for_bedrock
+clear_oauth_for_bedrock()
+
 # Initialize Sentry early to capture any startup errors
 from core.sentry import capture_exception, init_sentry
 

@@ -274,15 +274,28 @@ import sys
 async def generate_name():
     try:
         from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+        from phase_config import resolve_model_id
+        from core.auth import get_sdk_env_vars
+        from core.bedrock import is_bedrock_enabled, get_bedrock_env_vars, remove_oauth_from_env
 
         prompt = ${escapedPrompt}
+
+        # Resolve model name (handles Bedrock conversion if enabled)
+        model = resolve_model_id("haiku")
+
+        # Build environment variables for SDK
+        sdk_env = get_sdk_env_vars()
+        if is_bedrock_enabled():
+            sdk_env.update(get_bedrock_env_vars())
+            remove_oauth_from_env(sdk_env)
 
         # Create a minimal client for simple text generation (no tools needed)
         client = ClaudeSDKClient(
             options=ClaudeAgentOptions(
-                model="claude-haiku-4-5",
+                model=model,
                 system_prompt="You generate very short, concise terminal names (2-3 words MAX). Output ONLY the name, nothing else. No quotes, no explanation, no preamble. Keep it as short as possible while being descriptive.",
                 max_turns=1,
+                env=sdk_env,
             )
         )
 

@@ -1,4 +1,4 @@
-import { getOAuthModeClearVars } from '../../../agent/env-utils';
+import { getOAuthModeClearVars, getFreshAWSCredentials } from '../../../agent/env-utils';
 import { getAPIProfileEnv } from '../../../services/profile';
 import { getProfileEnv } from '../../../rate-limit-detector';
 import { pythonEnvManager } from '../../../python-env-manager';
@@ -10,8 +10,9 @@ import { pythonEnvManager } from '../../../python-env-manager';
  * 1. pythonEnv - Python environment including PYTHONPATH for bundled packages (fixes #139)
  * 2. apiProfileEnv - Custom Anthropic-compatible API profile (ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN)
  * 3. oauthModeClearVars - Clears stale ANTHROPIC_* vars when in OAuth mode
- * 4. profileEnv - Claude OAuth token from profile manager (CLAUDE_CODE_OAUTH_TOKEN)
- * 5. extraEnv - Caller-specific vars (e.g., USE_CLAUDE_MD)
+ * 4. freshAWSCredentials - Fresh AWS credentials for Bedrock mode
+ * 5. profileEnv - Claude OAuth token from profile manager (CLAUDE_CODE_OAUTH_TOKEN)
+ * 6. extraEnv - Caller-specific vars (e.g., USE_CLAUDE_MD)
  *
  * The pythonEnv is critical for packaged apps (#139) - without PYTHONPATH, Python
  * cannot find bundled dependencies like dotenv, claude_agent_sdk, etc.
@@ -25,13 +26,16 @@ export async function getRunnerEnv(
 ): Promise<Record<string, string>> {
   const pythonEnv = pythonEnvManager.getPythonEnv();
   const apiProfileEnv = await getAPIProfileEnv();
-  const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv);
+  const combinedEnv = { ...process.env, ...extraEnv } as Record<string, string>;
+  const oauthModeClearVars = getOAuthModeClearVars(apiProfileEnv, combinedEnv);
+  const freshAWSCredentials = getFreshAWSCredentials(combinedEnv);
   const profileEnv = getProfileEnv();
 
   return {
     ...pythonEnv,  // Python environment including PYTHONPATH (fixes #139)
     ...apiProfileEnv,
     ...oauthModeClearVars,
+    ...freshAWSCredentials,  // Fresh AWS credentials for Bedrock mode
     ...profileEnv,  // OAuth token from profile manager (fixes #563)
     ...extraEnv,
   };
